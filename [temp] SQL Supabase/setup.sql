@@ -1,5 +1,4 @@
 -- Linus 3D Lab webshop schema and starter catalog.
--- Run this file in the Supabase SQL Editor for a new project.
 
 create table if not exists public.products (
   id text primary key,
@@ -82,24 +81,24 @@ declare
   v_total numeric(10, 2) := 0;
 begin
   if length(trim(coalesce(p_customer_name, ''))) not between 2 and 120 then
-    raise exception 'Please provide a name between 2 and 120 characters.';
+    raise exception 'Indtast et navn på mellem 2 og 120 tegn.';
   end if;
   if length(trim(coalesce(p_customer_email, ''))) > 254
      or trim(coalesce(p_customer_email, '')) !~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$' then
-    raise exception 'Please provide a valid email address.';
+    raise exception 'Indtast en gyldig e-mailadresse.';
   end if;
   if length(coalesce(p_customer_phone, '')) > 40
      or length(trim(coalesce(p_shipping_address, ''))) not between 3 and 240
      or length(trim(coalesce(p_shipping_city, ''))) not between 1 and 100
      or length(trim(coalesce(p_shipping_postal_code, ''))) not between 1 and 24
      or length(coalesce(p_order_note, '')) > 500 then
-    raise exception 'One or more order details are invalid.';
+    raise exception 'Et eller flere af dine oplysninger er ugyldige.';
   end if;
   if jsonb_typeof(p_items) is distinct from 'array' then
-    raise exception 'An order must contain a JSON array of product lines.';
+    raise exception 'Bestillingen skal indeholde en liste over produkter.';
   end if;
   if jsonb_array_length(p_items) not between 1 and 50 then
-    raise exception 'An order must contain between 1 and 50 product lines.';
+    raise exception 'Bestillingen skal indeholde mellem 1 og 50 produktlinjer.';
   end if;
 
   insert into public.orders (
@@ -113,22 +112,22 @@ begin
   for v_item in select value from jsonb_array_elements(p_items)
   loop
     if jsonb_typeof(v_item) is distinct from 'object' then
-      raise exception 'Each order line must be a product object.';
+      raise exception 'Hver produktlinje skal indeholde et produkt.';
     end if;
     v_product_id := nullif(v_item ->> 'product_id', '');
     if coalesce(v_item ->> 'quantity', '') !~ '^[0-9]{1,2}$' then
-      raise exception 'Each order line needs a whole-number quantity.';
+      raise exception 'Antallet skal angives som et helt tal.';
     end if;
     v_quantity := (v_item ->> 'quantity')::integer;
     if v_product_id is null or v_quantity is null or v_quantity not between 1 and 99 then
-      raise exception 'Each order line needs a product and a quantity between 1 and 99.';
+      raise exception 'Vælg et produkt og et antal mellem 1 og 99.';
     end if;
 
     select id, name, price into v_product
       from public.products
       where id = v_product_id and active = true;
     if not found then
-      raise exception 'A product in your bag is no longer available.';
+      raise exception 'Et produkt i din kurv er ikke længere tilgængeligt.';
     end if;
 
     insert into public.order_items (order_id, product_id, product_name, quantity, unit_price)
@@ -146,12 +145,12 @@ grant execute on function public.place_order(text, text, text, text, text, text,
 
 insert into public.products (id, name, tagline, description, price, category, image_url, color, featured, is_new)
 values
-  ('slow-vase', 'The Slow Vase', 'A home for the in-between.', 'A softly sculpted vase for a single stem, a dried bloom, or simply a quieter corner.', 34, 'Home', 'https://images.unsplash.com/photo-1578500494198-246f612d3b3d?auto=format&fit=crop&w=900&q=85', 'sage', true, true),
-  ('orbit-planter', 'Orbit Planter', 'Room for something growing.', 'A compact planter with a considered silhouette, made for your favorite little plant.', 28, 'Home', 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?auto=format&fit=crop&w=900&q=85', 'peach', true, false),
-  ('desk-dock', 'The Desk Dock', 'A softer landing for tech.', 'A tidy home for your phone, earbuds, and the everyday essentials that never stay put.', 42, 'Workspace', 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=900&q=85', 'blue', true, true),
-  ('arc-catchall', 'Arc Catchall', 'For all the little things.', 'A small, open tray for keys, rings, paper clips, and all the things worth keeping close.', 22, 'Workspace', 'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?auto=format&fit=crop&w=900&q=85', 'lilac', false, false),
-  ('ribbed-lamp', 'Little Glow Lamp', 'A warm end to the day.', 'A sculptural lamp shade designed to soften the light and bring a little calm to your space.', 68, 'Lighting', 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=85', 'butter', true, false),
-  ('loop-hook', 'Loop Wall Hook', 'Hang on to the good stuff.', 'A playful wall hook for a favorite cap, a tote bag, or whatever needs a place to land.', 16, 'Home', 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=900&q=85', 'coral', false, false),
-  ('ripple-cup', 'Ripple Pen Cup', 'Make room for good ideas.', 'A tactile desk cup with a gentle ripple, ready for pens, pencils, or a few fresh stems.', 19, 'Workspace', 'https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?auto=format&fit=crop&w=900&q=85', 'mint', false, false),
-  ('pebble-tray', 'Pebble Tray', 'A place for your daily rituals.', 'An organic little tray for your morning coffee, bedside table, or favorite daily ritual.', 26, 'Home', 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=900&q=85', 'sand', false, true)
+  ('slow-vase', 'Den rolige vase', 'Et hjem til de små øjeblikke.', 'En blødt formet vase til en enkelt stilk, en tørret blomst eller et roligt hjørne.', 249, 'Bolig', 'https://images.unsplash.com/photo-1578500494198-246f612d3b3d?auto=format&fit=crop&w=900&q=85', 'sage', true, true),
+  ('orbit-planter', 'Orbit-plantekrukke', 'Plads til noget, der spirer.', 'En lille plantekrukke med en gennemtænkt form – til din yndlingsplante.', 199, 'Bolig', 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?auto=format&fit=crop&w=900&q=85', 'peach', true, false),
+  ('desk-dock', 'Skrivebordsstationen', 'En fast plads til dine ting.', 'En ryddelig plads til telefon, høretelefoner og andre ting, du gerne vil have lige ved hånden.', 299, 'Arbejdsplads', 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=900&q=85', 'blue', true, true),
+  ('arc-catchall', 'Arc-skålen', 'Til alle de små ting.', 'En lille skål til nøgler, ringe, papirclips og andre ting, du gerne vil have tæt på.', 159, 'Arbejdsplads', 'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?auto=format&fit=crop&w=900&q=85', 'lilac', false, false),
+  ('ribbed-lamp', 'Lille glødelampe', 'Blødt lys til dagens rolige stunder.', 'En skulpturel lampeskærm, der blødgør lyset og skaber ro i rummet.', 499, 'Belysning', 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=85', 'butter', true, false),
+  ('loop-hook', 'Loop-knage', 'En fin plads til dine favoritter.', 'En finurlig knage til yndlingskasketten, muleposen eller det, der mangler en plads.', 119, 'Bolig', 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=900&q=85', 'coral', false, false),
+  ('ripple-cup', 'Ripple-penneholder', 'Gør plads til gode idéer.', 'En rillet penneholder til skrivebordet – eller til et par friske blomster.', 129, 'Arbejdsplads', 'https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?auto=format&fit=crop&w=900&q=85', 'mint', false, false),
+  ('pebble-tray', 'Pebble-bakke', 'En plads til dine små ritualer.', 'En organisk lille bakke til morgenkaffen, natbordet eller dine daglige ritualer.', 179, 'Bolig', 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=900&q=85', 'sand', false, true)
 on conflict (id) do nothing;

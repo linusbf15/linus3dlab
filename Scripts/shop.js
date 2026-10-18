@@ -1,13 +1,22 @@
 (function () {
   "use strict";
 
-  const FREE_SHIPPING_THRESHOLD = 75;
+  const FREE_SHIPPING_THRESHOLD = 500;
+  const ALL_CATEGORY = "Alle";
+  const CATEGORY_LABELS = {
+    Home: "Bolig",
+    Workspace: "Arbejdsplads",
+    Lighting: "Belysning",
+    Fidgets: "Fidgetlegetøj"
+  };
   const CART_STORAGE_KEY = "linus3dlab-cart-v1";
   const config = window.shopConfig || {};
   let products = Array.isArray(window.shopProducts) ? window.shopProducts : [];
   let cart = loadCart();
-  let activeCategory = "All";
+  let activeCategory = ALL_CATEGORY;
   let toastTimer;
+  let productsRequestPending = false;
+  let lastProductsFetch = 0;
 
   const elements = {
     grid: document.getElementById("product-grid"),
@@ -16,6 +25,7 @@
     sort: document.getElementById("product-sort"),
     empty: document.getElementById("empty-state"),
     status: document.getElementById("shop-status"),
+    refreshProducts: document.getElementById("refresh-products"),
     clearFilters: document.getElementById("clear-filters"),
     cartOpen: document.getElementById("cart-open"),
     cartClose: document.getElementById("cart-close"),
@@ -59,7 +69,7 @@
   }
 
   function formatPrice(value) {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value) || 0);
+    return new Intl.NumberFormat("da-DK", { style: "currency", currency: "DKK" }).format(Number(value) || 0);
   }
 
   function hasSupabaseConfig() {
@@ -81,16 +91,22 @@
 
   async function fetchProducts() {
     if (!hasSupabaseConfig()) {
-      elements.status.textContent = "Preview collection · Connect Supabase to manage live products and orders.";
+      elements.status.textContent = "Database er ikke tilsluttet. Viser eksempelprodukter. Fejlkode: ERR_NO_CONFIG";
       return;
     }
 
+    if (productsRequestPending) return;
+    productsRequestPending = true;
+    elements.refreshProducts.disabled = true;
+    elements.status.textContent = "Henter produkter fra Database…";
     try {
       const response = await fetch(supabaseUrl("products?select=id,name,tagline,description,price,category,image_url,color,featured,is_new,active&active=eq.true&order=featured.desc,name.asc"), {
-        headers: supabaseHeaders()
+        headers: supabaseHeaders(),
+        cache: "no-store"
       });
       if (!response.ok) {
-        throw new Error(`Product request failed (${response.status}).`);
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message || body?.details || `Produktindlæsningen mislykkedes (${response.status}).`);
       }
       const rows = await response.json();
       products = rows.map((product) => ({
@@ -102,13 +118,17 @@
       const currentCart = cart.length;
       cart = cart.filter((item) => availableIds.has(item.id));
       if (cart.length !== currentCart) saveCart();
-      elements.status.textContent = "";
+      lastProductsFetch = Date.now();
+      elements.status.textContent = `${products.length} ${products.length === 1 ? "produkt indlæst" : "produkter indlæst"} fra Database.`;
       renderCategories();
       renderProducts();
       renderCart();
     } catch (error) {
-      elements.status.textContent = "Live products couldn't be loaded. Showing the preview collection instead.";
-      console.error("Supabase product load failed:", error);
+      elements.status.textContent = `Kunne ikke hente produkter fra Database: ${error.message} Viser de senest tilgængelige produkter.`;
+      console.error("Database product load failed:", error);
+    } finally {
+      productsRequestPending = false;
+      elements.refreshProducts.disabled = false;
     }
   }
 
@@ -120,7 +140,7 @@
         .filter((item) => item && typeof item.id === "string" && Number.isInteger(item.quantity) && item.quantity > 0)
         .map((item) => ({ id: item.id, quantity: Math.min(item.quantity, 99) }));
     } catch (error) {
-      console.error("Could not read the saved shopping bag:", error);
+      console.error("Kunne ikke indlæse den gemte indkøbskurv:", error);
       return [];
     }
   }
@@ -129,8 +149,8 @@
     try {
       localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
     } catch (error) {
-      console.error("Could not save the shopping bag:", error);
-      showToast("Your bag couldn't be saved on this device.");
+      console.error("Kunne ikke gemme indkøbskurven:", error);
+      showToast("Indkøbskurven kunne ikke gemmes på denne enhed.");
     }
   }
 
@@ -146,11 +166,11 @@
   }
 
   function renderCategories() {
-    const categories = ["All", ...new Set(products.map((product) => product.category).filter(Boolean))];
-    if (!categories.includes(activeCategory)) activeCategory = "All";
+    const categories = [ALL_CATEGORY, ...new Set(products.map((product) => product.category).filter(Boolean))];
+    if (!categories.includes(activeCategory)) activeCategory = ALL_CATEGORY;
     elements.categories.innerHTML = categories.map((category) => `
       <button class="category-chip${category === activeCategory ? " is-active" : ""}" type="button" data-category="${escapeHtml(category)}" aria-pressed="${category === activeCategory}">
-        ${escapeHtml(category)}
+        ${escapeHtml(category === ALL_CATEGORY ? ALL_CATEGORY : CATEGORY_LABELS[category] || category)}
       </button>
     `).join("");
   }
@@ -158,7 +178,7 @@
   function visibleProducts() {
     const query = elements.search.value.trim().toLowerCase();
     const matching = products.filter((product) => {
-      const matchesCategory = activeCategory === "All" || product.category === activeCategory;
+      const matchesCategory = activeCategory === ALL_CATEGORY || product.category === activeCategory;
       const searchable = `${product.name} ${product.tagline || ""} ${product.category || ""} ${product.description || ""}`.toLowerCase();
       return matchesCategory && searchable.includes(query);
     });
@@ -179,9 +199,9 @@
       <article class="product-card" style="--card-index:${index}">
         <div class="product-visual color-${escapeHtml(product.color || "sage")}">
           ${imageMarkup}
-          ${product.is_new ? '<span class="product-badge">Just arrived</span>' : ""}
-          <button class="quick-add" type="button" data-add="${escapeHtml(product.id)}" aria-label="Add ${escapeHtml(product.name)} to bag">
-            <span aria-hidden="true">+</span><span>Add to bag</span>
+          ${product.is_new ? '<span class="product-badge">Nyhed</span>' : ""}
+          <button class="quick-add" type="button" data-add="${escapeHtml(product.id)}" aria-label="Læg ${escapeHtml(product.name)} i kurven">
+            <span aria-hidden="true">+</span><span>Læg i kurv</span>
           </button>
         </div>
         <div class="product-details">
@@ -218,12 +238,12 @@
             <div class="cart-item-heading"><h3>${escapeHtml(product.name)}</h3><strong>${formatPrice(Number(product.price) * item.quantity)}</strong></div>
             <span class="cart-item-category">${escapeHtml(product.category || "")}</span>
             <div class="cart-item-controls">
-              <div class="quantity-control" aria-label="Quantity for ${escapeHtml(product.name)}">
-                <button type="button" data-quantity="${escapeHtml(product.id)}" data-change="-1" aria-label="Remove one ${escapeHtml(product.name)}">−</button>
+              <div class="quantity-control" aria-label="Antal ${escapeHtml(product.name)}">
+                <button type="button" data-quantity="${escapeHtml(product.id)}" data-change="-1" aria-label="Fjern én ${escapeHtml(product.name)}">−</button>
                 <span>${item.quantity}</span>
-                <button type="button" data-quantity="${escapeHtml(product.id)}" data-change="1" aria-label="Add one ${escapeHtml(product.name)}">+</button>
+                <button type="button" data-quantity="${escapeHtml(product.id)}" data-change="1" aria-label="Tilføj én ${escapeHtml(product.name)}">+</button>
               </div>
-              <button class="remove-item" type="button" data-remove="${escapeHtml(product.id)}">Remove</button>
+              <button class="remove-item" type="button" data-remove="${escapeHtml(product.id)}">Fjern</button>
             </div>
           </div>
         </article>
@@ -233,8 +253,8 @@
     elements.checkoutTotal.textContent = formatPrice(total);
     const remaining = FREE_SHIPPING_THRESHOLD - total;
     elements.shippingNote.textContent = remaining > 0
-      ? `You're ${formatPrice(remaining)} away from free shipping.`
-      : "Your order qualifies for free shipping. Lovely.";
+      ? `Køb for ${formatPrice(remaining)} mere, så får du fri fragt.`
+      : "Du får fri fragt på din bestilling.";
     elements.checkoutSubmit.disabled = cart.length === 0;
   }
 
@@ -278,12 +298,12 @@
   async function submitOrder(event) {
     event.preventDefault();
     if (!hasSupabaseConfig()) {
-      elements.checkoutNotice.textContent = "Checkout isn't connected yet. Add your Supabase project URL and anon key in Scripts/products.js, then run the SQL setup script to accept orders.";
+      elements.checkoutNotice.textContent = "Bestilling er ikke tilsluttet endnu. Tilføj din Supabase-projektadresse og offentlige anon-nøgle i Scripts/products.js, og kør SQL-opsætningen.";
       elements.checkoutNotice.className = "checkout-notice is-error";
       return;
     }
     if (cart.length === 0) {
-      elements.checkoutNotice.textContent = "Your bag is empty.";
+      elements.checkoutNotice.textContent = "Din indkøbskurv er tom.";
       elements.checkoutNotice.className = "checkout-notice is-error";
       return;
     }
@@ -302,7 +322,7 @@
     };
 
     elements.checkoutSubmit.disabled = true;
-    elements.checkoutSubmit.textContent = "Placing your order...";
+    elements.checkoutSubmit.textContent = "Sender din bestilling…";
     elements.checkoutNotice.textContent = "";
     elements.checkoutNotice.className = "checkout-notice";
     try {
@@ -313,27 +333,27 @@
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(result?.message || result?.details || "We couldn't place your order. Please check your details and try again.");
+        throw new Error(result?.message || result?.details || "Bestillingen kunne ikke gennemføres. Kontrollér dine oplysninger, og prøv igen.");
       }
       cart = [];
       saveCart();
       renderCart();
       elements.checkoutForm.reset();
-      elements.checkoutNotice.textContent = `Order confirmed — your reference is ${String(result).slice(0, 8).toUpperCase()}. We'll be in touch soon.`;
+      elements.checkoutNotice.textContent = `Din bestilling er modtaget. Dit bestillingsnummer er ${String(result).slice(0, 8).toUpperCase()}. Vi vender snart tilbage.`;
       elements.checkoutNotice.className = "checkout-notice is-success";
-      showToast("Your order is in. Thank you!");
+      showToast("Din bestilling er modtaget. Tak!");
       window.setTimeout(() => {
         if (elements.checkoutDialog.open) elements.checkoutDialog.close();
         elements.checkoutNotice.textContent = "";
         elements.checkoutNotice.className = "checkout-notice";
       }, 4200);
     } catch (error) {
-      console.error("Order placement failed:", error);
-      elements.checkoutNotice.textContent = error.message || "We couldn't place your order. Please try again.";
+      console.error("Bestillingen kunne ikke gennemføres:", error);
+      elements.checkoutNotice.textContent = error.message || "Bestillingen kunne ikke gennemføres. Prøv igen.";
       elements.checkoutNotice.className = "checkout-notice is-error";
     } finally {
       elements.checkoutSubmit.disabled = cart.length === 0;
-      elements.checkoutSubmit.innerHTML = 'Place your order <span aria-hidden="true">→</span>';
+      elements.checkoutSubmit.innerHTML = 'Send bestilling <span aria-hidden="true">→</span>';
     }
   }
 
@@ -350,8 +370,9 @@
   });
   elements.search.addEventListener("input", renderProducts);
   elements.sort.addEventListener("change", renderProducts);
+  elements.refreshProducts.addEventListener("click", fetchProducts);
   elements.clearFilters.addEventListener("click", () => {
-    activeCategory = "All";
+    activeCategory = ALL_CATEGORY;
     elements.search.value = "";
     renderCategories();
     renderProducts();
@@ -376,8 +397,8 @@
     elements.checkoutNotice.className = "checkout-notice";
     elements.checkoutTotal.textContent = formatPrice(cartTotal());
     elements.checkoutModeNote.textContent = hasSupabaseConfig()
-      ? "Order details are securely saved. We'll confirm shipping and payment by email."
-      : "Preview mode: orders aren't sent until Supabase is connected.";
+      ? "Dine oplysninger gemmes sikkert. Vi aftaler betaling og levering med dig via e-mail."
+      : "Eksempelvisning: Bestillinger sendes ikke, før Supabase er tilsluttet.";
     elements.checkoutDialog.showModal();
   });
   elements.checkoutClose.addEventListener("click", () => elements.checkoutDialog.close());
@@ -385,6 +406,9 @@
     if (event.target === elements.checkoutDialog) elements.checkoutDialog.close();
   });
   elements.checkoutForm.addEventListener("submit", submitOrder);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && hasSupabaseConfig() && Date.now() - lastProductsFetch > 30000) fetchProducts();
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && elements.cartDrawer.classList.contains("is-open")) setDrawer(false);
   });
@@ -394,4 +418,7 @@
   renderProducts();
   renderCart();
   fetchProducts();
+  window.setInterval(() => {
+    if (!document.hidden && hasSupabaseConfig()) fetchProducts();
+  }, 30000);
 })();

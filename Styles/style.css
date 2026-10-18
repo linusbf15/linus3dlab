@@ -105,7 +105,12 @@ h1, h2, h3, p { margin-top: 0; }
 .search-box input, .sort-select select { width: 147px; padding: 8px 0 13px; border: 0; outline: none; color: var(--ink); background: transparent; font-size: 10px; }
 .search-box input::placeholder { color: #92978f; }
 .sort-select select { width: auto; cursor: pointer; }
-.shop-status { min-height: 13px; margin: 0 0 11px; color: #7c827b; font-size: 10px; }
+.shop-status-row { min-height: 31px; margin: 0 0 4px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.shop-status { min-height: 13px; margin: 0; color: #7c827b; font-size: 10px; }
+.refresh-products { padding: 5px 0 5px 8px; border: 0; color: var(--green); background: transparent; cursor: pointer; font-size: 10px; white-space: nowrap; }
+.refresh-products:hover { color: var(--green-dark); }
+.refresh-products:disabled { opacity: .55; cursor: wait; }
+.refresh-products span { margin-left: 3px; font-size: 14px; }
 .product-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 34px 19px; }
 .product-card { min-width: 0; animation: arrive .45s both; animation-delay: calc(var(--card-index) * 35ms); }
 @keyframes arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
@@ -278,6 +283,8 @@ h1, h2, h3, p { margin-top: 0; }
   .category-list::-webkit-scrollbar { display: none; }
   .category-chip { flex: 0 0 auto; padding-bottom: 12px; font-size: 10px; }
   .shop-tools { padding-bottom: 9px; justify-content: space-between; }
+  .shop-status-row { align-items: flex-start; }
+  .shop-status { line-height: 1.5; }
   .search-box input { width: 145px; padding-bottom: 5px; }
   .sort-select select { padding: 5px 0; }
   .product-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 25px 11px; }
